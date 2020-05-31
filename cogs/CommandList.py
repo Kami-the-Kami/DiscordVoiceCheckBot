@@ -2,11 +2,18 @@ import discord
 from discord.ext import commands
 import sqlite3
 import copy
+from Database import Database
 
 
 class CommandList(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.db = Database('data/namesDB.db')
+
+
+    #db : Database = None
+
+
 
 
     @commands.command()
@@ -14,9 +21,6 @@ class CommandList(commands.Cog):
 
         cmdAuthor = ctx.author
         cmdChannel = None
-
-        LIST_USER_VCUsers : discord.abc.User = list()
-
         usersNotFound = list()
 
         # get voice channel the command author is in
@@ -33,14 +37,18 @@ class CommandList(commands.Cog):
 
         # get all members in caller's VC
         #for member in cmdChannel.members:
-        LIST_USER_VCUsers = cmdChannel.members
+        vcUsers = cmdChannel.members
 
         # set up DB, lines is all users in VC
         # TODO: Move this somewhere where cursor isn't queried >1 times
-        conn = sqlite3.connect('data/namesDB.db')
-        cursor = conn.cursor()
-        cursor.execute("select * from Users")
-        lines = cursor.fetchall()
+        ##conn = sqlite3.connect('data/namesDB.db')
+        ##cursor = conn.cursor()
+        ##cursor.execute("select * from Users")
+        ##lines = cursor.fetchall()
+
+        lines = self.db.getAllDBUsers()
+
+
 
 
         # parse all lines into kamiUsers
@@ -55,8 +63,6 @@ class CommandList(commands.Cog):
         for p in args:
             LIST_STRING_argumentPlayers.append(p.replace(",",""))
 
-
-
         #loop through arguments
         for u in LIST_STRING_argumentPlayers:
             INT_userID = None #current arg's player's Discord ID
@@ -67,7 +73,7 @@ class CommandList(commands.Cog):
                     userIsInVC = False
                     #check VC to make sure the DB user is actually in the VC
                     #TODO: Move this out of storedUsers loop
-                    for v in LIST_USER_VCUsers:
+                    for v in vcUsers:
                         if v.id == d.getUserID():
                             userIsInVC = True
                     #if he is, set the ID
@@ -79,7 +85,7 @@ class CommandList(commands.Cog):
                 print("user ID is None")
                 #couldnt find user in DB
                 #Check voice channel nicknames for username
-                for v in LIST_USER_VCUsers:
+                for v in vcUsers:
                     #if found argument in voice chat
                     if v.nick.lower() == u.lower():
                         print("vc user nick " + v.nick + " == argument nick")
@@ -87,20 +93,24 @@ class CommandList(commands.Cog):
                         newUser = [INT_userID, u]
 
                         #1 if id exists, 0 if not
-                        cursor.execute("select exists (select 1 from users where DiscordID='" + (str)(INT_userID) + "')")
+                        ##cursor.execute("select exists (select 1 from users where DiscordID='" + (str)(INT_userID) + "')")
                         #if the user exists in the db, add the new alias to the db
-                        if cursor.fetchone()[0] == 1:
+                        #if cursor.fetchone()[0] == 1:
+                        if self.db.getExistsUserID(INT_userID) == 1:
                             print("cursor found " + (str)(INT_userID) )
-                            cursor.execute("select Aliases from Users where DiscordID = '" + (str)(INT_userID) + "'")
-                            aliases = cursor.fetchone()
+                            ##cursor.execute("select Aliases from Users where DiscordID = '" + (str)(INT_userID) + "'")
+                            ##aliases = cursor.fetchone()
+                            aliases = self.db.getDBUserAliasesByID(INT_userID)
                             aliases = aliases[0] + "," + u
                             updatedUser = kamiUser([INT_userID, aliases])
-                            self.addKamiUserToDB(cursor, updatedUser)
+                            #self.addKamiUserToDB(cursor, updatedUser)
+                            self.db.addKamiUserToDB(updatedUser)
                             print("updated user " + v.nick)
                         #else, make a new db entry
                         else:
                             print("cursor did not find " + (str)(INT_userID))
-                            self.addKamiUserToDB(cursor, kamiUser(newUser))
+                            #self.addKamiUserToDB(cursor, kamiUser(newUser))
+                            self.db.addKamiUserToDB(kamiUser(newUser))
                             print("user " + v.nick + " added to db")
 
 
@@ -116,17 +126,12 @@ class CommandList(commands.Cog):
             await ctx.send("Users not found: " + self.listToString(usersNotFound))
 
         #cleanup DB
-        conn.commit()
-        cursor.close()
-        conn.close()
+        #self.db.writeChanges()
+        #TODO: Eventually actually close this
+        #self.db.closeDB()
 
     @commands.command()
     async def add(self, ctx, *args):
-        # set up DB, lines is all users in VC
-        # TODO: Move this somewhere where cursor isn't queried >1 times
-        conn = sqlite3.connect('data/namesDB.db')
-        cursor = conn.cursor()
-
         STRING_id = args[0]
         INT_id = 0
 
@@ -155,24 +160,30 @@ class CommandList(commands.Cog):
         tempUser = kamiUser([INT_id, STRING_nicknames])
 
         # 1 if id exists, 0 if not
-        cursor.execute("select exists (select 1 from users where DiscordID='" + (str)(INT_id) + "')")
+        #cursor.execute("select exists (select 1 from users where DiscordID='" + (str)(INT_id) + "')")
         #if user is already in the db, add new aliases
-        if cursor.fetchone()[0] == 1:
-            cursor.execute("select Aliases from Users where DiscordID = '" + (str)(INT_id) + "'")
-            aliases = cursor.fetchone()
+        #if cursor.fetchone()[0] == 1:
+        if self.db.getExistsUserID(INT_id) == 1:
+            #cursor.execute("select Aliases from Users where DiscordID = '" + (str)(INT_id) + "'")
+            #aliases = cursor.fetchone()
+            aliases = self.db.getDBUserAliasesByID(INT_id)
             aliases = aliases[0] + "," + STRING_nicknames
             updatedUser = kamiUser([INT_id, aliases])
-            self.addKamiUserToDB(cursor, updatedUser)
+            #self.addKamiUserToDB(cursor, updatedUser)
+            self.db.addKamiUserToDB(updatedUser)
             print("updated user " + STRING_id)
         #else create new entry
         else:
-            self.addKamiUserToDB(cursor, kamiUser(tempUser))
+            #self.addKamiUserToDB(cursor, kamiUser(tempUser))
+            self.db.addKamiUserToDB(kamiUser(tempUser))
             print("user " + STRING_id + " added to db")
 
         #cleanup DB
-        conn.commit()
-        cursor.close()
-        conn.close()
+        #conn.commit()
+        #cursor.close()
+        #conn.close()
+        #TODO: Eventually close this
+        #self.db.closeDB()
 
 
     #Transform list into formatted string
@@ -184,23 +195,10 @@ class CommandList(commands.Cog):
 
 
     #Update or Add kamiUser to DB
-    def addKamiUserToDB(self, cursor, kUser):
-        print(kUser.getUserID())
-        print(kUser.getAliasesAsString())
-        cursor.execute("insert or replace into Users (DiscordID, Aliases) values ('" + (str)(kUser.getUserID()) + "','" + kUser.getAliasesAsString() +"')")
-
-
-
-
-
-
-
-
-
-
-
-
-
+    #def addKamiUserToDB(self, cursor, kUser):
+        #print(kUser.getUserID())
+        #print(kUser.getAliasesAsString())
+        ##cursor.execute("insert or replace into Users (DiscordID, Aliases) values ('" + (str)(kUser.getUserID()) + "','" + kUser.getAliasesAsString() +"')")
 
 
 class kamiUser(object):
@@ -243,7 +241,6 @@ class kamiUser(object):
             if a.lower() == alias.lower():
                 return True
         return False
-
 
 
 def setup(bot):
