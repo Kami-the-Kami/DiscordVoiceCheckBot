@@ -1,6 +1,4 @@
 import sqlite3
-import copy
-
 
 class Database(object):
     conn = None
