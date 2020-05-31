@@ -12,30 +12,28 @@ class CommandList(commands.Cog):
     @commands.command()
     async def check(self, ctx, *args):
 
-        USER_author = ctx.author
-        CHANNEL_channel = None
-        #args = ctx.args
+        cmdAuthor = ctx.author
+        cmdChannel = None
 
         LIST_USER_VCUsers : discord.abc.User = list()
 
         usersNotFound = list()
 
         # get voice channel the command author is in
-        for c in ctx.guild.voice_channels:
-            for m in c.members:
-                if m.id == USER_author.id:
-                    CHANNEL_channel = c
+        for vChannel in ctx.guild.voice_channels:
+            for member in vChannel.members:
+                if member.id == cmdAuthor.id:
+                    cmdChannel = vChannel
 
         # if the caller isnt in VC, or the bot cant see the VC
-        if CHANNEL_channel is None:
+        if cmdChannel is None:
             # TODO: throw an exception or something.
             await ctx.send("Join the voice channel you want to check")
             return
 
         # get all members in caller's VC
-        #TODO: switch this to an assign statement once known it works
-        for m in CHANNEL_channel.members:
-            LIST_USER_VCUsers.append(m)
+        #for member in cmdChannel.members:
+        LIST_USER_VCUsers = cmdChannel.members
 
         # set up DB, lines is all users in VC
         # TODO: Move this somewhere where cursor isn't queried >1 times
@@ -51,24 +49,38 @@ class CommandList(commands.Cog):
             x = copy.copy(kamiUser(l))
             LIST_KAMIUSER_storedUsersList.append(x)
 
+
         #store args into list
         LIST_STRING_argumentPlayers = list()
         for p in args:
             LIST_STRING_argumentPlayers.append(p.replace(",",""))
 
 
-        #check each discordID in db against
+
+        #loop through arguments
         for u in LIST_STRING_argumentPlayers:
-            INT_userID = None
+            INT_userID = None #current arg's player's Discord ID
+            #loop through DB's users
             for d in LIST_KAMIUSER_storedUsersList:
+                #if a DB user has the Arg's alias, set the ID to be that player
                 if d.checkIfAliasExists(u):
-                    print("Alias " + u + " exists")
-                    INT_userID = d.getUserID()
+                    userIsInVC = False
+                    #check VC to make sure the DB user is actually in the VC
+                    #TODO: Move this out of storedUsers loop
+                    for v in LIST_USER_VCUsers:
+                        if v.id == d.getUserID():
+                            userIsInVC = True
+                    #if he is, set the ID
+                    if userIsInVC:
+                        print("Alias " + u + " exists")
+                        INT_userID = d.getUserID()
+            #if the user is not in the DB
             if INT_userID == None:
                 print("user ID is None")
                 #couldnt find user in DB
                 #Check voice channel nicknames for username
                 for v in LIST_USER_VCUsers:
+                    #if found argument in voice chat
                     if v.nick.lower() == u.lower():
                         print("vc user nick " + v.nick + " == argument nick")
                         INT_userID = v.id
@@ -76,6 +88,7 @@ class CommandList(commands.Cog):
 
                         #1 if id exists, 0 if not
                         cursor.execute("select exists (select 1 from users where DiscordID='" + (str)(INT_userID) + "')")
+                        #if the user exists in the db, add the new alias to the db
                         if cursor.fetchone()[0] == 1:
                             print("cursor found " + (str)(INT_userID) )
                             cursor.execute("select Aliases from Users where DiscordID = '" + (str)(INT_userID) + "'")
@@ -84,6 +97,7 @@ class CommandList(commands.Cog):
                             updatedUser = kamiUser([INT_userID, aliases])
                             self.addKamiUserToDB(cursor, updatedUser)
                             print("updated user " + v.nick)
+                        #else, make a new db entry
                         else:
                             print("cursor did not find " + (str)(INT_userID))
                             self.addKamiUserToDB(cursor, kamiUser(newUser))
@@ -95,12 +109,13 @@ class CommandList(commands.Cog):
                 usersNotFound.append(u)
                 print("USER " + u + " NOT IN VC")
 
+        #Handle output to original channel
         if len(usersNotFound) == 0:
             await ctx.send("All users found in VC")
         else:
             await ctx.send("Users not found: " + self.listToString(usersNotFound))
 
-
+        #cleanup DB
         conn.commit()
         cursor.close()
         conn.close()
@@ -115,34 +130,33 @@ class CommandList(commands.Cog):
         STRING_id = args[0]
         INT_id = 0
 
+        #scan guild members to find the arg name
         for m in ctx.guild.members:
-            print("---")
-            print(m)
-            print(m.nick)
-            print(m.display_name)
-            print(m.id)
             if m.display_name.lower() == STRING_id.lower():
                 INT_id = m.id
-
+        #if we havent found the user
         if INT_id == 0:
             print("user " + STRING_id + " not found on server")
             await ctx.send("user " + STRING_id + " not found on server")
             return
 
-
+        #add all args following [1] as nicknames
         LIST_STRING_nick = list()
         for i in range(1, len(args)):
             LIST_STRING_nick.append(args[i])
 
         STRING_nicknames = ""
+        #transform into a string
         for s in LIST_STRING_nick:
             STRING_nicknames = STRING_nicknames + s + ","
         STRING_nicknames = STRING_nicknames[:-1]
 
+        #create tmp kamiuser object
         tempUser = kamiUser([INT_id, STRING_nicknames])
 
         # 1 if id exists, 0 if not
         cursor.execute("select exists (select 1 from users where DiscordID='" + (str)(INT_id) + "')")
+        #if user is already in the db, add new aliases
         if cursor.fetchone()[0] == 1:
             cursor.execute("select Aliases from Users where DiscordID = '" + (str)(INT_id) + "'")
             aliases = cursor.fetchone()
@@ -150,16 +164,18 @@ class CommandList(commands.Cog):
             updatedUser = kamiUser([INT_id, aliases])
             self.addKamiUserToDB(cursor, updatedUser)
             print("updated user " + STRING_id)
+        #else create new entry
         else:
             self.addKamiUserToDB(cursor, kamiUser(tempUser))
             print("user " + STRING_id + " added to db")
 
+        #cleanup DB
         conn.commit()
         cursor.close()
         conn.close()
 
 
-
+    #Transform list into formatted string
     def listToString(self, s):
         output = ""
         for x in s:
@@ -167,7 +183,7 @@ class CommandList(commands.Cog):
         return output[:-1]
 
 
-
+    #Update or Add kamiUser to DB
     def addKamiUserToDB(self, cursor, kUser):
         print(kUser.getUserID())
         print(kUser.getAliasesAsString())
@@ -227,28 +243,6 @@ class kamiUser(object):
             if a.lower() == alias.lower():
                 return True
         return False
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
