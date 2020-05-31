@@ -13,6 +13,10 @@ class CommandList(commands.Cog):
     @commands.command()
     async def check(self, ctx, *args):
 
+        if len(args) == 0:
+            await ctx.send("Usage: *check Player1, Player2, Player3, ... , PlayerN")
+            return
+
         cmdAuthor = ctx.author
         cmdChannel = None
         usersNotFound = list()
@@ -62,6 +66,7 @@ class CommandList(commands.Cog):
                     if userIsInVC:
                         print("Alias " + argPlayer + " exists")
                         userID = storedUser.getUserID()
+
             #if the user is not in the DB
             if userID == None:
                 print("user ID is None")
@@ -71,9 +76,7 @@ class CommandList(commands.Cog):
                     #if found argument in voice chat
                     if vcUser.nick.lower() == argPlayer.lower():
                         print("vc user nick " + vcUser.nick + " == argument nick")
-                        userID = vcUser.id
-
-                        self.addOrUpdateUserToDB(userID, argPlayer)
+                        self.addOrUpdateUserToDB(vcUser.id, argPlayer)
             #If it's still not found
             if userID == None:
                 usersNotFound.append(argPlayer)
@@ -92,6 +95,12 @@ class CommandList(commands.Cog):
 
     @commands.command()
     async def add(self, ctx, *args):
+
+        if len(args) == 0:
+            await ctx.send("Usage: *add DiscordName Alias1 Alias2 Alias3 ... AliasN")
+            return
+
+
         STRING_id = args[0]
         INT_id = 0
 
@@ -119,6 +128,8 @@ class CommandList(commands.Cog):
 
         self.addOrUpdateUserToDB(INT_id, strNicknames)
 
+        await ctx.send("Nickname(s) " + strNicknames + " added to user " + args[0])
+
         #TODO: Eventually close this
         #self.db.closeDB()
 
@@ -130,9 +141,7 @@ class CommandList(commands.Cog):
             self.db.addKamiUserToDB(updatedUser)
         #else create new entry
         else:
-            #self.addKamiUserToDB(cursor, kamiUser(tempUser))
             self.db.addKamiUserToDB(kamiUser([id, oldNicknames]))
-
 
     #Transform list into formatted string
     def listToString(self, s):
