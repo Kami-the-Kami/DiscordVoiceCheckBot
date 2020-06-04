@@ -3,6 +3,7 @@ from discord.ext import commands
 import sqlite3
 import copy
 from Database import Database
+from kamiUser import kamiUser
 
 
 class CommandList(commands.Cog):
@@ -74,8 +75,11 @@ class CommandList(commands.Cog):
                 #Check voice channel nicknames for username
                 for vcUser in vcUsers:
                     #if found argument in voice chat
-                    if vcUser.nick.lower() == argPlayer.lower():
-                        print("vc user nick " + vcUser.nick + " == argument nick")
+                    a = vcUser.display_name.lower()
+                    b = argPlayer.lower()
+                    #if vcUser.display_name.lower() == argPlayer.lower():
+                    if a == b:
+                        print("vc user nick " + vcUser.display_name + " == argument nick")
                         self.addOrUpdateUserToDB(vcUser.id, argPlayer)
             #If it's still not found
             if userID == None:
@@ -150,43 +154,6 @@ class CommandList(commands.Cog):
             output = output + (str)(x) + ","
         return output[:-1]
 
-
-class kamiUser(object):
-    userID = None
-    aliases = list()
-
-    def __init__(self, line):
-        self.lines = line
-
-        self.setUserID(line[0])
-        self.setAliases(line[1])
-
-    def getUserID(self):
-        return self.userID
-
-    def getAliasesAsList(self):
-        return self.aliases
-
-    def getAliasesAsString(self):
-        str = ""
-        for a in self.aliases:
-            str = str + a + ","
-        return str[:-1]
-
-    def setUserID(self, id):
-        self.userID = id
-
-    def setAliases(self, lines):
-        self.aliases = lines.replace(" ","").split(",")
-        
-    def setAliasesFromList(self, lst):
-        self.aliases = lst
-
-    def checkIfAliasExists(self, alias):
-        for a in self.getAliasesAsList():
-            if a.lower() == alias.lower():
-                return True
-        return False
 
 
 def setup(bot):
